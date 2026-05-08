@@ -163,3 +163,58 @@ public class Clam {
                 } else if (a.equals("--state") && i + 1 < args.length) {
                     stateDir = Paths.get(args[++i]);
                 } else if (a.equals("--log") && i + 1 < args.length) {
+                    logPath = Paths.get(args[++i]);
+                } else if (a.equals("--")) {
+                    for (int j = i + 1; j < args.length; j++) cmd.add(args[j]);
+                    break;
+                } else {
+                    // treat as command if it looks like one (first token)
+                    cmd.add(a);
+                }
+            }
+
+            return new Args(help, headless, port, configPath, stateDir, logPath, cmd.isEmpty() ? null : List.copyOf(cmd));
+        }
+
+        static String usage() {
+            return ""
+                + "clam - AI claw autofix and rebuild watchdog\n"
+                + "\n"
+                + "Usage:\n"
+                + "  java Clam [--headless] [--port N] [--config PATH] [--state PATH] [--log PATH] [-- <command...>]\n"
+                + "\n"
+                + "Examples:\n"
+                + "  java Clam --headless --port 48123 -- cmd /c node clawbot.js\n"
+                + "  java Clam -- -- python clawbot.py\n"
+                + "\n"
+                + "UI mode launches by default (omit --headless).\n";
+        }
+
+        private static Integer safeParseInt(String s) {
+            try { return Integer.parseInt(s.trim()); } catch (Exception e) { return null; }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Runtime environment detection
+    // ---------------------------------------------------------------------
+    static final class RuntimeEnv {
+        final String osName;
+        final boolean windows;
+        final boolean mac;
+        final boolean linux;
+        final String javaVersion;
+        final String pid;
+        final String user;
+
+        private RuntimeEnv(String osName, boolean windows, boolean mac, boolean linux, String javaVersion, String pid, String user) {
+            this.osName = osName;
+            this.windows = windows;
+            this.mac = mac;
+            this.linux = linux;
+            this.javaVersion = javaVersion;
+            this.pid = pid;
+            this.user = user;
+        }
+
+        static RuntimeEnv detect() {
