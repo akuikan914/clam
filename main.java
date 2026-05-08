@@ -218,3 +218,58 @@ public class Clam {
         }
 
         static RuntimeEnv detect() {
+            String os = System.getProperty("os.name", "unknown");
+            String osLower = os.toLowerCase(Locale.ROOT);
+            boolean win = osLower.contains("win");
+            boolean mac = osLower.contains("mac");
+            boolean lin = osLower.contains("nux") || osLower.contains("linux");
+            String jv = System.getProperty("java.version", "?");
+            String user = System.getProperty("user.name", "?");
+            String pid = "?";
+            try {
+                // Works on HotSpot: "pid@host"
+                String name = ManagementFactory.getRuntimeMXBean().getName();
+                int at = name.indexOf('@');
+                pid = at > 0 ? name.substring(0, at) : name;
+            } catch (Exception ignored) {}
+            return new RuntimeEnv(os, win, mac, lin, jv, pid, user);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Config
+    // ---------------------------------------------------------------------
+    static final class Config {
+        final int httpPort;
+        final int uiRefreshMs;
+        final int heartbeatMs;
+        final int minUptimeMs;
+        final int backoffMinMs;
+        final int backoffMaxMs;
+        final int maxRestartsPerHour;
+        final boolean autoStart;
+
+        final List<String> command;
+        final Path workDir;
+        final Map<String, String> env;
+
+        final Pattern crashSignature;
+        final int crashScanLines;
+        final int crashScanBytes;
+
+        final int rebuildWindowSeconds;
+        final int rebuildMaxAttempts;
+        final int rebuildAttemptSpacingMs;
+        final boolean rebuildAggressiveGc;
+
+        final int journalFlushMs;
+        final int snapshotRingSize;
+
+        private Config(
+            int httpPort,
+            int uiRefreshMs,
+            int heartbeatMs,
+            int minUptimeMs,
+            int backoffMinMs,
+            int backoffMaxMs,
+            int maxRestartsPerHour,
