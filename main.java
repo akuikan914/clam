@@ -108,3 +108,58 @@ public class Clam {
         }
     }
 
+    private static void idleForever() {
+        final Object lock = new Object();
+        synchronized (lock) {
+            try {
+                lock.wait();
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Args
+    // ---------------------------------------------------------------------
+    static final class Args {
+        final boolean showHelp;
+        final boolean headless;
+        final Integer httpPort;
+        final Path configPath;
+        final Path stateDir;
+        final Path logPath;
+        final List<String> cmd;
+
+        private Args(boolean showHelp, boolean headless, Integer httpPort, Path configPath, Path stateDir, Path logPath, List<String> cmd) {
+            this.showHelp = showHelp;
+            this.headless = headless;
+            this.httpPort = httpPort;
+            this.configPath = configPath;
+            this.stateDir = stateDir;
+            this.logPath = logPath;
+            this.cmd = cmd;
+        }
+
+        static Args parse(String[] args) {
+            boolean help = false;
+            boolean headless = false;
+            Integer port = null;
+            Path configPath = null;
+            Path stateDir = null;
+            Path logPath = null;
+            List<String> cmd = new ArrayList<>();
+
+            for (int i = 0; i < args.length; i++) {
+                String a = args[i];
+                if (a.equals("-h") || a.equals("--help")) {
+                    help = true;
+                } else if (a.equals("--headless")) {
+                    headless = true;
+                } else if (a.equals("--port") && i + 1 < args.length) {
+                    port = safeParseInt(args[++i]);
+                } else if (a.equals("--config") && i + 1 < args.length) {
+                    configPath = Paths.get(args[++i]);
+                } else if (a.equals("--state") && i + 1 < args.length) {
+                    stateDir = Paths.get(args[++i]);
+                } else if (a.equals("--log") && i + 1 < args.length) {
