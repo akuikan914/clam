@@ -1098,3 +1098,58 @@ public class Clam {
         private static long seedFromMachine() {
             long t = System.nanoTime();
             long h = 1469598103934665603L;
+            h ^= t; h *= 1099511628211L;
+            h ^= (long) Runtime.getRuntime().availableProcessors(); h *= 1099511628211L;
+            h ^= (long) Objects.hashCode(System.getProperty("user.name", "")); h *= 1099511628211L;
+            return h;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Restart limiter (sliding window)
+    // ---------------------------------------------------------------------
+    static final class RestartLimiter {
+        private final int maxPerHour;
+        private final Deque<Long> restarts = new ArrayDeque<>();
+
+        RestartLimiter(int maxPerHour) {
+            this.maxPerHour = Math.max(1, maxPerHour);
+        }
+
+        synchronized boolean allow(long nowMs) {
+            trim(nowMs);
+            return restarts.size() < maxPerHour;
+        }
+
+        synchronized void noteRestart(long nowMs) {
+            trim(nowMs);
+            restarts.addLast(nowMs);
+        }
+
+        synchronized int countLastHour(long nowMs) {
+            trim(nowMs);
+            return restarts.size();
+        }
+
+        private void trim(long nowMs) {
+            long cut = nowMs - 3600_000L;
+            while (!restarts.isEmpty() && restarts.peekFirst() < cut) restarts.removeFirst();
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Lightweight HTTP status server (no deps)
+    // ---------------------------------------------------------------------
+    static final class StatusServer {
+        private final int port;
+        private final Supplier<Snapshot> snapshotSupplier;
+        private final RollingLog log;
+        private final Journal journal;
+        private final EventBus bus;
+        private volatile ServerSocket server;
+        private volatile Thread thread;
+        private final AtomicBoolean running = new AtomicBoolean(false);
+
+        interface Supplier<T> { T get(); }
+
+        StatusServer(int port, Supplier<Snapshot> snapshotSupplier, RollingLog log, Journal journal, EventBus bus) {
