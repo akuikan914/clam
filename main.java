@@ -1813,3 +1813,58 @@ public class Clam {
             JsonParse p = new JsonParse(raw == null ? "" : raw);
             skipWs(p);
             Object v = parseValue(p);
+            skipWs(p);
+            return v;
+        }
+
+        private static Object parseValue(JsonParse p) {
+            skipWs(p);
+            if (p.i >= p.s.length()) return null;
+            char c = p.s.charAt(p.i);
+            if (c == '{') return parseMap(p);
+            if (c == '[') return parseList(p);
+            if (c == '"') return parseString(p);
+            if (c == 't' && p.s.startsWith("true", p.i)) { p.i += 4; return Boolean.TRUE; }
+            if (c == 'f' && p.s.startsWith("false", p.i)) { p.i += 5; return Boolean.FALSE; }
+            if (c == 'n' && p.s.startsWith("null", p.i)) { p.i += 4; return null; }
+            return parseNumber(p);
+        }
+
+        private static Map<String, Object> parseMap(JsonParse p) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            expect(p, '{');
+            skipWs(p);
+            if (peek(p) == '}') { p.i++; return m; }
+            while (true) {
+                skipWs(p);
+                String k = parseString(p);
+                skipWs(p);
+                expect(p, ':');
+                skipWs(p);
+                Object v = parseValue(p);
+                m.put(k, v);
+                skipWs(p);
+                char c = peek(p);
+                if (c == ',') { p.i++; continue; }
+                if (c == '}') { p.i++; break; }
+                break;
+            }
+            return m;
+        }
+
+        private static List<Object> parseList(JsonParse p) {
+            List<Object> out = new ArrayList<>();
+            expect(p, '[');
+            skipWs(p);
+            if (peek(p) == ']') { p.i++; return out; }
+            while (true) {
+                Object v = parseValue(p);
+                out.add(v);
+                skipWs(p);
+                char c = peek(p);
+                if (c == ',') { p.i++; continue; }
+                if (c == ']') { p.i++; break; }
+                break;
+            }
+            return out;
+        }
