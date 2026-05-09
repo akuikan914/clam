@@ -1043,3 +1043,58 @@ public class Clam {
             for (Event e : eventsTail) {
                 Map<String, Object> em = new LinkedHashMap<>();
                 em.put("atMs", e.atMs);
+                em.put("level", e.level);
+                em.put("type", e.type);
+                em.put("message", e.message);
+                if (!e.fields.isEmpty()) em.put("fields", e.fields);
+                ev.add(em);
+            }
+            m.put("events", ev);
+            return m;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Backoff with jitter (mainstream exponential)
+    // ---------------------------------------------------------------------
+    static final class Backoff {
+        private final int minMs;
+        private final int maxMs;
+        private final double factor;
+        private final double jitter;
+        private int step;
+        private final Random rnd;
+        private long last;
+
+        Backoff(int minMs, int maxMs, double factor, double jitter) {
+            this.minMs = Math.max(0, minMs);
+            this.maxMs = Math.max(this.minMs, maxMs);
+            this.factor = factor <= 0 ? 0.2 : factor;
+            this.jitter = Math.max(0, Math.min(0.45, jitter));
+            this.step = 0;
+            this.rnd = new Random(seedFromMachine());
+        }
+
+        long nextDelayMs() {
+            if (step == 0) {
+                step = 1;
+                last = 0;
+                return 0;
+            }
+            double exp = Math.pow(1.0 + factor, step - 1);
+            long base = (long) (minMs * exp);
+            base = Math.max(minMs, Math.min(maxMs, base));
+            long j = (long) (base * jitter);
+            long delta = (j > 0) ? (rnd.nextInt((int) (2L * j + 1)) - j) : 0;
+            long out = Math.max(0, Math.min(maxMs, base + delta));
+            last = out;
+            step = Math.min(step + 1, 50);
+            return out;
+        }
+
+        void reset() { step = 0; last = 0; }
+        long lastDelayMs() { return last; }
+
+        private static long seedFromMachine() {
+            long t = System.nanoTime();
+            long h = 1469598103934665603L;
