@@ -658,3 +658,58 @@ public class Clam {
     // Watchdog engine
     // ---------------------------------------------------------------------
     static final class WatchdogEngine {
+        private final Config config;
+        private final Clock clock;
+        private final RollingLog log;
+        private final Journal journal;
+        private final EventBus bus;
+
+        private final ScheduledExecutorService scheduler;
+        private final ExecutorService ioPool;
+        private final AtomicBoolean running = new AtomicBoolean(false);
+
+        private final RestartLimiter limiter;
+        private final Backoff backoff;
+
+        private final Object procLock = new Object();
+        private volatile Process process;
+        private volatile long procStartedMs;
+        private volatile long procExitedMs;
+        private volatile Integer lastExitCode;
+        private volatile String lastCrashHint;
+
+        private final RingBuffer<String> stdoutRing;
+        private final RingBuffer<String> stderrRing;
+        private final RingBuffer<Event> eventRing;
+
+        private volatile int rebuildAttempts;
+        private volatile long rebuildWindowStartMs;
+
+        WatchdogEngine(Config config, Clock clock, RollingLog log, Journal journal, EventBus bus) {
+            this.config = config;
+            this.clock = clock;
+            this.log = log;
+            this.journal = journal;
+            this.bus = bus;
+            this.scheduler = Executors.newScheduledThreadPool(3, new NamedThreadFactory("clam-sched"));
+            this.ioPool = Executors.newCachedThreadPool(new NamedThreadFactory("clam-io"));
+            this.limiter = new RestartLimiter(config.maxRestartsPerHour);
+            this.backoff = new Backoff(config.backoffMinMs, config.backoffMaxMs, 0.22, 0.12);
+            this.stdoutRing = new RingBuffer<>(config.snapshotRingSize);
+            this.stderrRing = new RingBuffer<>(config.snapshotRingSize);
+            this.eventRing = new RingBuffer<>(config.snapshotRingSize);
+            bus.subscribe(e -> eventRing.add(e));
+        }
+
+        void start() {
+            if (!running.compareAndSet(false, true)) return;
+
+            bus.publish(Event.info("clam.engine.start", "Engine starting")
+                .with("version", APP_VERSION)
+                .with("buildStamp", BUILD_STAMP)
+                .with("pid", RuntimeEnv.detect().pid));
+
+            scheduler.scheduleAtFixedRate(this::tickHeartbeatSafe, 200, config.heartbeatMs, TimeUnit.MILLISECONDS);
+            scheduler.scheduleAtFixedRate(this::tickMonitorSafe, 350, 500, TimeUnit.MILLISECONDS);
+            scheduler.scheduleAtFixedRate(this::tickRebuildSafe, 700, 900, TimeUnit.MILLISECONDS);
+
