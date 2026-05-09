@@ -273,3 +273,58 @@ public class Clam {
             int backoffMinMs,
             int backoffMaxMs,
             int maxRestartsPerHour,
+            boolean autoStart,
+            List<String> command,
+            Path workDir,
+            Map<String, String> env,
+            Pattern crashSignature,
+            int crashScanLines,
+            int crashScanBytes,
+            int rebuildWindowSeconds,
+            int rebuildMaxAttempts,
+            int rebuildAttemptSpacingMs,
+            boolean rebuildAggressiveGc,
+            int journalFlushMs,
+            int snapshotRingSize
+        ) {
+            this.httpPort = httpPort;
+            this.uiRefreshMs = uiRefreshMs;
+            this.heartbeatMs = heartbeatMs;
+            this.minUptimeMs = minUptimeMs;
+            this.backoffMinMs = backoffMinMs;
+            this.backoffMaxMs = backoffMaxMs;
+            this.maxRestartsPerHour = maxRestartsPerHour;
+            this.autoStart = autoStart;
+            this.command = command;
+            this.workDir = workDir;
+            this.env = env;
+            this.crashSignature = crashSignature;
+            this.crashScanLines = crashScanLines;
+            this.crashScanBytes = crashScanBytes;
+            this.rebuildWindowSeconds = rebuildWindowSeconds;
+            this.rebuildMaxAttempts = rebuildMaxAttempts;
+            this.rebuildAttemptSpacingMs = rebuildAttemptSpacingMs;
+            this.rebuildAggressiveGc = rebuildAggressiveGc;
+            this.journalFlushMs = journalFlushMs;
+            this.snapshotRingSize = snapshotRingSize;
+        }
+
+        static Config loadOrCreate(Path path, Args args, RuntimeEnv env, RollingLog log, Journal journal) {
+            if (Files.exists(path)) {
+                try {
+                    String raw = Files.readString(path, StandardCharsets.UTF_8);
+                    Map<String, Object> m = Json2.parseObject(raw);
+                    Config cfg = fromMap(m, args, env);
+                    log.info("Loaded config: " + path.toAbsolutePath());
+                    journal.write(Event.info("clam.config.load", "Loaded config").with("path", path.toString()));
+                    return cfg;
+                } catch (Exception e) {
+                    log.warn("Config load failed. Using defaults. Error: " + e.getMessage());
+                    journal.write(Event.warn("clam.config.load_failed", "Config load failed; using defaults").with("error", e.toString()));
+                }
+            }
+
+            Config created = defaults(args, env);
+            try {
+                Files.writeString(path, Json.pretty(created.toMap()), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                log.info("Wrote default config: " + path.toAbsolutePath());
