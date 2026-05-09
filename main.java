@@ -328,3 +328,58 @@ public class Clam {
             try {
                 Files.writeString(path, Json.pretty(created.toMap()), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                 log.info("Wrote default config: " + path.toAbsolutePath());
+                journal.write(Event.info("clam.config.created", "Created default config").with("path", path.toString()));
+            } catch (Exception e) {
+                log.warn("Could not write default config: " + e.getMessage());
+                journal.write(Event.warn("clam.config.write_failed", "Could not write default config").with("error", e.toString()));
+            }
+            return created;
+        }
+
+        static Config defaults(Args args, RuntimeEnv env) {
+            int port = args.httpPort != null ? args.httpPort : DEFAULT_HTTP_PORT;
+            int ui = DEFAULT_UI_REFRESH_MS;
+            int hb = DEFAULT_HEARTBEAT_MS;
+            int minUp = DEFAULT_MIN_UPTIME_MS;
+            int boMin = DEFAULT_BACKOFF_MIN_MS;
+            int boMax = DEFAULT_BACKOFF_MAX_MS;
+            int maxR = DEFAULT_MAX_RESTARTS_PER_HOUR;
+            boolean autoStart = true;
+
+            List<String> cmd = args.cmd != null ? args.cmd : suggestedCommand(env);
+            Path wd = Paths.get(System.getProperty("user.dir", "."));
+            Map<String, String> e = new LinkedHashMap<>();
+            e.put("CLAM_BUILD", BUILD_TOKEN);
+            e.put("CLAM_MODE", "watchdog");
+            e.put("CLAM_HEARTBEAT_MS", Integer.toString(hb));
+
+            Pattern crashSig = Pattern.compile("(?i)(fatal|panic|out of memory|segmentation fault|unhandled|exception)");
+            int scanLines = 120;
+            int scanBytes = 48_000;
+
+            int rebuildWindowSeconds = 3600;
+            int rebuildMaxAttempts = 5;
+            int rebuildAttemptSpacingMs = 3500;
+            boolean rebuildAggressiveGc = false;
+
+            int journalFlushMs = 1500;
+            int snapshotRingSize = 256;
+
+            return new Config(
+                port, ui, hb, minUp, boMin, boMax, maxR, autoStart,
+                cmd, wd, e,
+                crashSig, scanLines, scanBytes,
+                rebuildWindowSeconds, rebuildMaxAttempts, rebuildAttemptSpacingMs, rebuildAggressiveGc,
+                journalFlushMs, snapshotRingSize
+            );
+        }
+
+        static List<String> suggestedCommand(RuntimeEnv env) {
+            // This is intentionally conservative: a placeholder that works out-of-the-box.
+            // The user can set the real clawbot command in the UI.
+            if (env.windows) return List.of("cmd", "/c", "ping", "127.0.0.1", "-n", "6");
+            return List.of("sh", "-lc", "sleep 5");
+        }
+
+        static Config fromMap(Map<String, Object> m, Args args, RuntimeEnv env) {
+            int port = asInt(m.get("httpPort"), args.httpPort != null ? args.httpPort : DEFAULT_HTTP_PORT);
