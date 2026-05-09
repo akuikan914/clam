@@ -1263,3 +1263,58 @@ public class Clam {
             out.write(hdr.getBytes(StandardCharsets.UTF_8));
             out.write(bytes);
             out.flush();
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // UI (Swing)
+    // ---------------------------------------------------------------------
+    static final class ClamUI {
+        private final Path configPath;
+        private final Config config;
+        private final RuntimeEnv env;
+        private final WatchdogEngine engine;
+        private final StatusServer http;
+        private final RollingLog log;
+        private final Journal journal;
+        private final EventBus bus;
+
+        private JFrame frame;
+        private JTextArea stdoutArea;
+        private JTextArea stderrArea;
+        private JTextArea eventsArea;
+        private JLabel statusLabel;
+        private JLabel uptimeLabel;
+        private JLabel restartsLabel;
+        private JLabel backoffLabel;
+        private JTextField cmdField;
+        private JTextField wdField;
+        private JTextField portField;
+        private JCheckBox headlessHint;
+        private Timer timer;
+
+        private final AtomicInteger uiTick = new AtomicInteger(0);
+
+        ClamUI(Path configPath, Config config, RuntimeEnv env, WatchdogEngine engine, StatusServer http,
+               RollingLog log, Journal journal, EventBus bus) {
+            this.configPath = configPath;
+            this.config = config;
+            this.env = env;
+            this.engine = engine;
+            this.http = http;
+            this.log = log;
+            this.journal = journal;
+            this.bus = bus;
+        }
+
+        void show() {
+            frame = new JFrame(APP_NAME + " — claw autofix & rebuild (" + APP_VERSION + ")");
+            frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+            frame.setMinimumSize(new Dimension(1020, 760));
+
+            JPanel root = new JPanel(new BorderLayout(10, 10));
+            root.setBorder(new EmptyBorder(10, 10, 10, 10));
+            root.add(buildTopBar(), BorderLayout.NORTH);
+            root.add(buildCenter(), BorderLayout.CENTER);
+            root.add(buildBottom(), BorderLayout.SOUTH);
+
