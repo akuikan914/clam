@@ -1703,3 +1703,58 @@ public class Clam {
     }
 
     static final class Json {
+        static String stringify(Object o) {
+            StringBuilder sb = new StringBuilder();
+            write(sb, o);
+            return sb.toString();
+        }
+
+        static String pretty(Object o) {
+            String raw = stringify(o);
+            // lightweight pretty print for readability: insert newlines after commas in top-level objects/arrays
+            StringBuilder sb = new StringBuilder(raw.length() + 64);
+            int depth = 0;
+            boolean inString = false;
+            for (int i = 0; i < raw.length(); i++) {
+                char c = raw.charAt(i);
+                if (c == '"' && (i == 0 || raw.charAt(i - 1) != '\\')) inString = !inString;
+                if (!inString) {
+                    if (c == '{' || c == '[') {
+                        depth++;
+                        sb.append(c).append('\n').append("  ".repeat(Math.max(0, depth)));
+                        continue;
+                    }
+                    if (c == '}' || c == ']') {
+                        depth--;
+                        sb.append('\n').append("  ".repeat(Math.max(0, depth))).append(c);
+                        continue;
+                    }
+                    if (c == ',') {
+                        sb.append(c).append('\n').append("  ".repeat(Math.max(0, depth)));
+                        continue;
+                    }
+                    if (c == ':') {
+                        sb.append(": ");
+                        continue;
+                    }
+                }
+                sb.append(c);
+            }
+            sb.append('\n');
+            return sb.toString();
+        }
+
+        static void write(StringBuilder sb, Object o) {
+            if (o == null) { sb.append("null"); return; }
+            if (o instanceof String s) { sb.append('"').append(escape(s)).append('"'); return; }
+            if (o instanceof Number || o instanceof Boolean) { sb.append(o); return; }
+            if (o instanceof Map<?, ?> m) {
+                sb.append("{");
+                boolean first = true;
+                for (Map.Entry<?, ?> e : m.entrySet()) {
+                    if (!first) sb.append(",");
+                    first = false;
+                    sb.append('"').append(escape(String.valueOf(e.getKey()))).append('"').append(":");
+                    write(sb, e.getValue());
+                }
+                sb.append("}");
