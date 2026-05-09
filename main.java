@@ -603,3 +603,58 @@ public class Clam {
 
         Journal(Path path, RollingLog log) {
             this.path = path;
+            this.log = log;
+            ensureDir(path.toAbsolutePath().getParent());
+        }
+
+        void write(Event e) {
+            if (e == null) return;
+            String line = e.toNdjson();
+            if (line.length() > MAX_EVENT_BYTES) {
+                // keep the head/tail; avoid huge writes
+                String head = line.substring(0, MAX_EVENT_BYTES / 2);
+                String tail = line.substring(line.length() - MAX_EVENT_BYTES / 2);
+                line = head + "...(truncated)..." + tail;
+            }
+            synchronized (lock) {
+                try {
+                    Files.writeString(path, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                } catch (IOException ex) {
+                    log.warn("Journal write failed: " + ex.getMessage());
+                }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Event bus and ring buffer for snapshots
+    // ---------------------------------------------------------------------
+    static final class EventBus {
+        private final RollingLog log;
+        private final Journal journal;
+        private final CopyOnWriteArrayList<Consumer<Event>> listeners = new CopyOnWriteArrayList<>();
+
+        EventBus(RollingLog log, Journal journal) {
+            this.log = log;
+            this.journal = journal;
+        }
+
+        void subscribe(Consumer<Event> cb) { if (cb != null) listeners.add(cb); }
+        void unsubscribe(Consumer<Event> cb) { listeners.remove(cb); }
+
+        void publish(Event e) {
+            if (e == null) return;
+            journal.write(e);
+            if ("error".equals(e.level)) log.error(e.type + ": " + e.message, null);
+            else if ("warn".equals(e.level)) log.warn(e.type + ": " + e.message);
+            else log.info(e.type + ": " + e.message);
+            for (Consumer<Event> cb : listeners) {
+                try { cb.accept(e); } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Watchdog engine
+    // ---------------------------------------------------------------------
+    static final class WatchdogEngine {
