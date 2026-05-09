@@ -548,3 +548,58 @@ public class Clam {
             this.keep = Math.max(1, keep);
             ensureDir(path.toAbsolutePath().getParent());
         }
+
+        void info(String msg) { write("INFO", msg, null); }
+        void warn(String msg) { write("WARN", msg, null); }
+        void error(String msg, Throwable t) { write("ERROR", msg, t); }
+
+        private void write(String level, String msg, Throwable t) {
+            synchronized (lock) {
+                rotateIfNeeded();
+                String line = fmt.format(new Date()) + " [" + level + "] " + msg + "\n";
+                try {
+                    Files.writeString(path, line, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                    if (t != null) {
+                        StringWriter sw = new StringWriter();
+                        t.printStackTrace(new PrintWriter(sw));
+                        Files.writeString(path, sw.toString() + "\n", StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+                    }
+                } catch (IOException ignored) {}
+            }
+        }
+
+        private void rotateIfNeeded() {
+            try {
+                if (Files.exists(path)) {
+                    long size = Files.size(path);
+                    if (size < rotateBytes) return;
+                }
+                // rotate: log -> log.1 -> log.2 -> ...
+                for (int i = keep - 1; i >= 1; i--) {
+                    Path src = Paths.get(path.toString() + "." + i);
+                    Path dst = Paths.get(path.toString() + "." + (i + 1));
+                    if (Files.exists(src)) {
+                        try {
+                            Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                        } catch (IOException ignored) {}
+                    }
+                }
+                if (Files.exists(path)) {
+                    try {
+                        Files.move(path, Paths.get(path.toString() + ".1"), StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException ignored) {}
+                }
+            } catch (IOException ignored) {}
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Journal (NDJSON)
+    // ---------------------------------------------------------------------
+    static final class Journal {
+        private final Path path;
+        private final RollingLog log;
+        private final Object lock = new Object();
+
+        Journal(Path path, RollingLog log) {
+            this.path = path;
