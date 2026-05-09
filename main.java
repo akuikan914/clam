@@ -1648,3 +1648,58 @@ public class Clam {
         private int size = 0;
 
         RingBuffer(int capacity) {
+            int cap = Math.max(8, capacity);
+            this.buf = new Object[cap];
+        }
+
+        void add(T v) {
+            synchronized (lock) {
+                buf[head] = v;
+                head = (head + 1) % buf.length;
+                if (size < buf.length) size++;
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        List<T> tail(int max) {
+            synchronized (lock) {
+                int n = Math.min(size, Math.max(0, max));
+                List<T> out = new ArrayList<>(n);
+                for (int i = n - 1; i >= 0; i--) {
+                    int idx = (head - 1 - i);
+                    while (idx < 0) idx += buf.length;
+                    idx %= buf.length;
+                    out.add((T) buf[idx]);
+                }
+                return out;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Shutdown hook
+    static final class ShutdownHook {
+        private final RollingLog log;
+        private final Journal journal;
+        private final Runnable onShutdown;
+        private final AtomicBoolean installed = new AtomicBoolean(false);
+
+        ShutdownHook(RollingLog log, Journal journal, Runnable onShutdown) {
+            this.log = log;
+            this.journal = journal;
+            this.onShutdown = onShutdown;
+        }
+
+        void install() {
+            if (!installed.compareAndSet(false, true)) return;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    journal.write(Event.warn("clam.shutdown", "Shutdown hook invoked"));
+                    log.warn("Shutdown hook invoked");
+                    onShutdown.run();
+                } catch (Exception ignored) {}
+            }, "clam-shutdown"));
+        }
+    }
+
+    static final class Json {
