@@ -438,3 +438,58 @@ public class Clam {
             m.put("crashScanBytes", crashScanBytes);
             m.put("rebuildWindowSeconds", rebuildWindowSeconds);
             m.put("rebuildMaxAttempts", rebuildMaxAttempts);
+            m.put("rebuildAttemptSpacingMs", rebuildAttemptSpacingMs);
+            m.put("rebuildAggressiveGc", rebuildAggressiveGc);
+            m.put("journalFlushMs", journalFlushMs);
+            m.put("snapshotRingSize", snapshotRingSize);
+            return m;
+        }
+
+        private static int asInt(Object o, int d) {
+            if (o instanceof Number n) return n.intValue();
+            if (o instanceof String s) {
+                try { return Integer.parseInt(s.trim()); } catch (Exception ignored) {}
+            }
+            return d;
+        }
+
+        private static boolean asBool(Object o, boolean d) {
+            if (o instanceof Boolean b) return b;
+            if (o instanceof String s) return s.trim().equalsIgnoreCase("true");
+            return d;
+        }
+
+        private static String asString(Object o, String d) {
+            if (o == null) return d;
+            return String.valueOf(o);
+        }
+
+        @SuppressWarnings("unchecked")
+        private static List<String> asStringList(Object o, List<String> d) {
+            if (o instanceof List<?> list) {
+                List<String> out = new ArrayList<>();
+                for (Object x : list) out.add(String.valueOf(x));
+                return List.copyOf(out);
+            }
+            return d;
+        }
+
+        @SuppressWarnings("unchecked")
+        private static Map<String, String> asStringMap(Object o) {
+            Map<String, String> out = new LinkedHashMap<>();
+            if (o instanceof Map<?, ?> m) {
+                for (Map.Entry<?, ?> e : m.entrySet()) {
+                    out.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
+                }
+            }
+            return out;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Clock + time helpers
+    // ---------------------------------------------------------------------
+    static final class Clock {
+        long nowMs() { return System.currentTimeMillis(); }
+        Instant now() { return Instant.now(); }
+    }
