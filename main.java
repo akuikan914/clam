@@ -878,3 +878,58 @@ public class Clam {
             long now = clock.nowMs();
             if (!limiter.allow(now)) {
                 bus.publish(Event.error("clam.restart.blocked", "Restart rate limited")
+                    .with("maxPerHour", config.maxRestartsPerHour)
+                    .with("count", limiter.countLastHour(now)));
+                return;
+            }
+
+            long delay = backoff.nextDelayMs();
+            if (delay > 0) {
+                bus.publish(Event.warn("clam.restart.backoff", "Restart backoff delay")
+                    .with("delayMs", delay));
+                sleep(delay);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(config.command);
+            pb.directory(config.workDir.toFile());
+            Map<String, String> env = pb.environment();
+            env.putAll(config.env);
+
+            // stdout/stderr capture
+            pb.redirectErrorStream(false);
+
+            bus.publish(Event.info("clam.process.start", "Starting target process")
+                .with("cmd", config.command)
+                .with("workDir", config.workDir.toString()));
+
+            try {
+                Process p = pb.start();
+                synchronized (procLock) {
+                    process = p;
+                    procStartedMs = now;
+                    procExitedMs = 0;
+                    lastExitCode = null;
+                }
+
+                limiter.noteRestart(now);
+                lastCrashHint = null;
+
+                ioPool.submit(() -> pump("stdout", p.getInputStream(), stdoutRing, bus));
+                ioPool.submit(() -> pump("stderr", p.getErrorStream(), stderrRing, bus));
+
+            } catch (IOException e) {
+                bus.publish(Event.error("clam.process.start_failed", "Failed to start target process")
+                    .with("error", e.toString()));
+            }
+        }
+
+        private void stopProcess() {
+            synchronized (procLock) {
+                if (process == null) return;
+                Process p = process;
+                if (p.isAlive()) {
+                    bus.publish(Event.warn("clam.process.stop", "Stopping target process"));
+                    try { p.destroy(); } catch (Exception ignored) {}
+                }
+                process = null;
+            }
