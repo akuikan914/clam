@@ -1428,3 +1428,58 @@ public class Clam {
 
             int y = 0;
             c.gridx = 0; c.gridy = y; c.weightx = 0; p.add(lCmd, c);
+            c.gridx = 1; c.gridy = y; c.weightx = 1; p.add(cmdField, c);
+            y++;
+            c.gridx = 0; c.gridy = y; c.weightx = 0; p.add(lWd, c);
+            c.gridx = 1; c.gridy = y; c.weightx = 1; p.add(wdField, c);
+            y++;
+            c.gridx = 0; c.gridy = y; c.weightx = 0; p.add(lPort, c);
+            c.gridx = 1; c.gridy = y; c.weightx = 1; p.add(portField, c);
+            y++;
+            c.gridx = 1; c.gridy = y; c.weightx = 1; p.add(headlessHint, c);
+            y++;
+
+            JPanel btns = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+            btns.add(openConfig);
+            btns.add(saveConfig);
+            btns.add(validate);
+            btns.add(copyCurl);
+
+            c.gridx = 1; c.gridy = y; c.weightx = 1; p.add(btns, c);
+            y++;
+
+            JTextArea help = new JTextArea();
+            help.setEditable(false);
+            help.setOpaque(false);
+            help.setLineWrap(true);
+            help.setWrapStyleWord(true);
+            help.setText(
+                "Config is stored as JSON at:\n" + configPath.toAbsolutePath() + "\n\n" +
+                "This UI writes the file, but does not hot-reload the engine command in-place.\n" +
+                "After saving config, click Restart to apply.\n\n" +
+                "HTTP endpoints:\n" +
+                "  GET /status  (JSON)\n" +
+                "  GET /health  (ok/down)\n"
+            );
+
+            c.gridx = 0; c.gridy = y; c.weightx = 1; c.gridwidth = 2; c.fill = GridBagConstraints.BOTH;
+            c.weighty = 1;
+            p.add(new JScrollPane(help), c);
+            c.gridwidth = 1;
+
+            return p;
+        }
+
+        private JComponent buildBottom() {
+            JPanel p = new JPanel(new BorderLayout());
+            JLabel about = new JLabel("Build: " + BUILD_TOKEN + " | OS: " + env.osName + " | Java: " + env.javaVersion + " | User: " + env.user);
+            about.setFont(about.getFont().deriveFont(Font.PLAIN, 11f));
+            p.add(about, BorderLayout.WEST);
+
+            JButton openStatus = new JButton("Open /status in browser");
+            openStatus.addActionListener(e -> openUrl("http://127.0.0.1:" + config.httpPort + "/status"));
+            p.add(openStatus, BorderLayout.EAST);
+            return p;
+        }
+
+        private void tickUI(ActionEvent e) {
