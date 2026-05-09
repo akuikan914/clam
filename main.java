@@ -1593,3 +1593,58 @@ public class Clam {
             if (frame != null) frame.setTitle(APP_NAME + " — claw autofix & rebuild (" + APP_VERSION + ") *");
         }
 
+        private static String formatDurationMs(long ms) {
+            if (ms < 0) return "—";
+            long s = ms / 1000;
+            long h = s / 3600;
+            long m = (s % 3600) / 60;
+            long sec = s % 60;
+            if (h > 0) return String.format("%dh %dm %ds", h, m, sec);
+            if (m > 0) return String.format("%dm %ds", m, sec);
+            return String.format("%ds", sec);
+        }
+
+        private static void openUrl(String url) {
+            try {
+                if (Desktop.isDesktopSupported()) Desktop.getDesktop().browse(URI.create(url));
+            } catch (Exception ignored) {}
+        }
+
+        private static void openFile(Path path) {
+            try {
+                if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(path.toFile());
+            } catch (Exception ignored) {}
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Named thread factory
+    // ---------------------------------------------------------------------
+    static final class NamedThreadFactory implements ThreadFactory {
+        private final String prefix;
+        private final AtomicInteger idx = new AtomicInteger(1);
+
+        NamedThreadFactory(String prefix) { this.prefix = prefix; }
+
+        @Override public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, prefix + "-" + idx.getAndIncrement());
+            t.setDaemon(true);
+            t.setUncaughtExceptionHandler((th, ex) -> {
+                try {
+                    System.err.println("Uncaught in " + th.getName() + ": " + ex);
+                } catch (Exception ignored) {}
+            });
+            return t;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Ring buffer
+    // ---------------------------------------------------------------------
+    static final class RingBuffer<T> {
+        private final Object lock = new Object();
+        private final Object[] buf;
+        private int head = 0;
+        private int size = 0;
+
+        RingBuffer(int capacity) {
