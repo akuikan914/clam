@@ -988,3 +988,58 @@ public class Clam {
         final boolean alive;
         final long startedMs;
         final long exitedMs;
+        final Integer exitCode;
+        final String crashHint;
+        final int rebuildAttempts;
+        final long rebuildWindowStartMs;
+        final int restartsLastHour;
+        final long backoffMs;
+        final String cmd;
+        final String workDir;
+        final List<String> stdoutTail;
+        final List<String> stderrTail;
+        final List<Event> eventsTail;
+
+        Snapshot(boolean alive, long startedMs, long exitedMs, Integer exitCode, String crashHint,
+                 int rebuildAttempts, long rebuildWindowStartMs, int restartsLastHour, long backoffMs,
+                 String cmd, String workDir,
+                 List<String> stdoutTail, List<String> stderrTail, List<Event> eventsTail) {
+            this.alive = alive;
+            this.startedMs = startedMs;
+            this.exitedMs = exitedMs;
+            this.exitCode = exitCode;
+            this.crashHint = crashHint;
+            this.rebuildAttempts = rebuildAttempts;
+            this.rebuildWindowStartMs = rebuildWindowStartMs;
+            this.restartsLastHour = restartsLastHour;
+            this.backoffMs = backoffMs;
+            this.cmd = cmd;
+            this.workDir = workDir;
+            this.stdoutTail = stdoutTail;
+            this.stderrTail = stderrTail;
+            this.eventsTail = eventsTail;
+        }
+
+        Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("app", APP_NAME);
+            m.put("version", APP_VERSION);
+            m.put("buildStamp", BUILD_STAMP);
+            m.put("alive", alive);
+            m.put("startedMs", startedMs);
+            m.put("exitedMs", exitedMs);
+            m.put("exitCode", exitCode);
+            m.put("crashHint", crashHint);
+            m.put("rebuildAttempts", rebuildAttempts);
+            m.put("rebuildWindowStartMs", rebuildWindowStartMs);
+            m.put("restartsLastHour", restartsLastHour);
+            m.put("backoffMs", backoffMs);
+            m.put("cmd", cmd);
+            m.put("workDir", workDir);
+            m.put("stdoutTail", stdoutTail);
+            m.put("stderrTail", stderrTail);
+
+            List<Map<String, Object>> ev = new ArrayList<>();
+            for (Event e : eventsTail) {
+                Map<String, Object> em = new LinkedHashMap<>();
+                em.put("atMs", e.atMs);
