@@ -1153,3 +1153,58 @@ public class Clam {
         interface Supplier<T> { T get(); }
 
         StatusServer(int port, Supplier<Snapshot> snapshotSupplier, RollingLog log, Journal journal, EventBus bus) {
+            this.port = port <= 0 ? DEFAULT_HTTP_PORT : port;
+            this.snapshotSupplier = snapshotSupplier;
+            this.log = log;
+            this.journal = journal;
+            this.bus = bus;
+        }
+
+        void start() {
+            if (!running.compareAndSet(false, true)) return;
+            thread = new Thread(this::serveLoop, "clam-http");
+            thread.setDaemon(true);
+            thread.start();
+            bus.publish(Event.info("clam.http.start", "HTTP status server started").with("port", port));
+        }
+
+        void stop() {
+            running.set(false);
+            try { if (server != null) server.close(); } catch (IOException ignored) {}
+        }
+
+        private void serveLoop() {
+            try (ServerSocket ss = new ServerSocket()) {
+                this.server = ss;
+                ss.setReuseAddress(true);
+                ss.bind(new InetSocketAddress("127.0.0.1", port));
+                while (running.get()) {
+                    try {
+                        Socket s = ss.accept();
+                        s.setSoTimeout(2500);
+                        handle(s);
+                    } catch (SocketException se) {
+                        if (!running.get()) break;
+                    } catch (Exception e) {
+                        bus.publish(Event.warn("clam.http.accept", "Accept failed").with("error", e.toString()));
+                    }
+                }
+            } catch (Exception e) {
+                bus.publish(Event.error("clam.http.bind", "Could not bind HTTP server").with("error", e.toString()).with("port", port));
+            }
+        }
+
+        private void handle(Socket s) {
+            try (s; InputStream in = s.getInputStream(); OutputStream out = s.getOutputStream()) {
+                String req = readLine(in);
+                if (req == null) return;
+                // read and discard headers
+                while (true) {
+                    String line = readLine(in);
+                    if (line == null || line.isEmpty()) break;
+                }
+
+                String[] parts = req.split("\\s+");
+                String method = parts.length > 0 ? parts[0] : "";
+                String path = parts.length > 1 ? parts[1] : "/";
+
