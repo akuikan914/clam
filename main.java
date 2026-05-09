@@ -493,3 +493,58 @@ public class Clam {
         long nowMs() { return System.currentTimeMillis(); }
         Instant now() { return Instant.now(); }
     }
+
+    // ---------------------------------------------------------------------
+    // Structured event for journal/UI/HTTP
+    // ---------------------------------------------------------------------
+    static final class Event {
+        final String level;
+        final String type;
+        final String message;
+        final long atMs;
+        final Map<String, Object> fields;
+
+        private Event(String level, String type, String message, long atMs, Map<String, Object> fields) {
+            this.level = level;
+            this.type = type;
+            this.message = message;
+            this.atMs = atMs;
+            this.fields = fields;
+        }
+
+        static Event info(String type, String message) { return new Event("info", type, message, System.currentTimeMillis(), new LinkedHashMap<>()); }
+        static Event warn(String type, String message) { return new Event("warn", type, message, System.currentTimeMillis(), new LinkedHashMap<>()); }
+        static Event error(String type, String message) { return new Event("error", type, message, System.currentTimeMillis(), new LinkedHashMap<>()); }
+
+        Event with(String k, Object v) {
+            if (k != null) fields.put(k, v);
+            return this;
+        }
+
+        String toNdjson() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("atMs", atMs);
+            m.put("level", level);
+            m.put("type", type);
+            m.put("message", message);
+            if (!fields.isEmpty()) m.put("fields", fields);
+            return Json.stringify(m);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Rolling log file
+    // ---------------------------------------------------------------------
+    static final class RollingLog {
+        private final Path path;
+        private final long rotateBytes;
+        private final int keep;
+        private final Object lock = new Object();
+        private final SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+
+        RollingLog(Path path, long rotateBytes, int keep) {
+            this.path = path;
+            this.rotateBytes = rotateBytes;
+            this.keep = Math.max(1, keep);
+            ensureDir(path.toAbsolutePath().getParent());
+        }
