@@ -823,3 +823,58 @@ public class Clam {
 
             // if died quickly, schedule rebuild logic
             if (lifetime < config.minUptimeMs) {
+                String hint = scanCrashHint();
+                lastCrashHint = hint;
+                bus.publish(Event.warn("clam.process.crash_hint", "Crash hint scanned")
+                    .with("hint", hint == null ? "(none)" : hint));
+            }
+
+            // restart if possible
+            scheduler.execute(this::ensureRunningSafe);
+        }
+
+        private void tickRebuild() {
+            long now = clock.nowMs();
+            // Rebuild is a soft loop: if we are crashing too often, apply a repair policy.
+            int restarts = limiter.countLastHour(now);
+            if (restarts < Math.max(3, config.maxRestartsPerHour / 4)) return;
+
+            if (rebuildWindowStartMs == 0 || now - rebuildWindowStartMs > config.rebuildWindowSeconds * 1000L) {
+                rebuildWindowStartMs = now;
+                rebuildAttempts = 0;
+            }
+
+            if (rebuildAttempts >= config.rebuildMaxAttempts) return;
+
+            // if currently running, don't rebuild
+            Process p = process;
+            if (p != null && p.isAlive()) return;
+
+            // attempt "autofix": a sequence of local actions
+            rebuildAttempts++;
+            bus.publish(Event.warn("clam.rebuild.start", "Starting rebuild attempt " + rebuildAttempts)
+                .with("restartsLastHour", restarts)
+                .with("lastCrashHint", lastCrashHint));
+
+            // simple policies that don't require domain-specific knowledge:
+            // - rotate leftover temp files in state dir (already handled by rolling log)
+            // - optional GC on Windows to encourage releasing file handles
+            if (config.rebuildAggressiveGc) {
+                System.gc();
+                bus.publish(Event.info("clam.rebuild.gc", "Requested GC"));
+            }
+
+            // Wait a little before restart attempt (avoid thrash)
+            sleep(config.rebuildAttemptSpacingMs);
+            scheduler.execute(this::ensureRunningSafe);
+        }
+
+        private void ensureRunning() {
+            if (!running.get()) return;
+            synchronized (procLock) {
+                if (process != null && process.isAlive()) return;
+            }
+
+            long now = clock.nowMs();
+            if (!limiter.allow(now)) {
+                bus.publish(Event.error("clam.restart.blocked", "Restart rate limited")
