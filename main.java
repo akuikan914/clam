@@ -1923,3 +1923,33 @@ public class Clam {
 
         private static void skipWs(JsonParse p) {
             while (p.i < p.s.length()) {
+                char c = p.s.charAt(p.i);
+                if (c == ' ' || c == '\n' || c == '\r' || c == '\t') p.i++;
+                else break;
+            }
+        }
+
+        private static void expect(JsonParse p, char c) {
+            skipWs(p);
+            if (p.i >= p.s.length() || p.s.charAt(p.i) != c) throw new IllegalArgumentException("Expected '" + c + "'");
+            p.i++;
+        }
+
+        private static char peek(JsonParse p) {
+            if (p.i >= p.s.length()) return 0;
+            return p.s.charAt(p.i);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers
+    // ---------------------------------------------------------------------
+    private static void ensureDir(Path p) {
+        if (p == null) return;
+        try { Files.createDirectories(p); } catch (Exception ignored) {}
+    }
+
+    private static void sleep(long ms) {
+        try { Thread.sleep(Math.max(0, ms)); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+    }
+}
