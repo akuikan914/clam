@@ -933,3 +933,58 @@ public class Clam {
                 }
                 process = null;
             }
+        }
+
+        private static void pump(String name, InputStream in, RingBuffer<String> ring, EventBus bus) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    ring.add(line);
+                    if (line.length() > 0 && line.length() < 280) {
+                        if (line.toLowerCase(Locale.ROOT).contains("error") || line.toLowerCase(Locale.ROOT).contains("fatal")) {
+                            bus.publish(Event.warn("clam.stream." + name, "Stream flagged line").with("line", line));
+                        }
+                    }
+                }
+            } catch (IOException ignored) {
+                // stream closes on process exit
+            }
+        }
+
+        private String scanCrashHint() {
+            // heuristic: look at stderr tail for signature lines
+            List<String> tail = stderrRing.tail(config.crashScanLines);
+            for (int i = tail.size() - 1; i >= 0; i--) {
+                String line = tail.get(i);
+                if (line == null) continue;
+                if (line.length() > config.crashScanBytes) continue;
+                if (config.crashSignature.matcher(line).find()) return line.trim();
+            }
+            // fallback: stdout tail
+            tail = stdoutRing.tail(config.crashScanLines / 2);
+            for (int i = tail.size() - 1; i >= 0; i--) {
+                String line = tail.get(i);
+                if (line == null) continue;
+                if (config.crashSignature.matcher(line).find()) return line.trim();
+            }
+            return null;
+        }
+
+        private static String pidHint(Process p) {
+            try {
+                // Java 9+ gives pid() on Process
+                long pid = p.pid();
+                return Long.toString(pid);
+            } catch (Throwable ignored) {
+                return "?";
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Snapshot for UI/HTTP
+    // ---------------------------------------------------------------------
+    static final class Snapshot {
+        final boolean alive;
+        final long startedMs;
+        final long exitedMs;
