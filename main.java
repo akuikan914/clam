@@ -768,3 +768,58 @@ public class Clam {
             bus.publish(Event.info("clam.engine.command", "Command updated").with("cmd", cmd));
             // Config is immutable; this method is intentionally limited.
             // For UI editing, we request restart with an explicit new Config by writing config file and reloading.
+        }
+
+        void manualStart() { scheduler.execute(this::ensureRunningSafe); }
+        void manualStop() { scheduler.execute(this::stopProcessSafe); }
+        void manualRestart() { scheduler.execute(this::restartSafe); }
+
+        private void tickHeartbeatSafe() { try { tickHeartbeat(); } catch (Exception e) { bus.publish(Event.warn("clam.tick.heartbeat", "Heartbeat tick failed").with("error", e.toString())); } }
+        private void tickMonitorSafe() { try { tickMonitor(); } catch (Exception e) { bus.publish(Event.warn("clam.tick.monitor", "Monitor tick failed").with("error", e.toString())); } }
+        private void tickRebuildSafe() { try { tickRebuild(); } catch (Exception e) { bus.publish(Event.warn("clam.tick.rebuild", "Rebuild tick failed").with("error", e.toString())); } }
+        private void ensureRunningSafe() { try { ensureRunning(); } catch (Exception e) { bus.publish(Event.error("clam.ensure", "Ensure running failed").with("error", e.toString())); } }
+        private void stopProcessSafe() { try { stopProcess(); } catch (Exception e) { bus.publish(Event.warn("clam.stop", "Stop failed").with("error", e.toString())); } }
+        private void restartSafe() { try { stopProcess(); sleep(200); ensureRunning(); } catch (Exception e) { bus.publish(Event.error("clam.restart", "Restart failed").with("error", e.toString())); } }
+
+        private void tickHeartbeat() {
+            long now = clock.nowMs();
+            Process p = process;
+            boolean alive = p != null && p.isAlive();
+
+            if (alive) {
+                bus.publish(Event.info("clam.heartbeat", "clawbot alive")
+                    .with("uptimeMs", now - procStartedMs)
+                    .with("pidHint", pidHint(p)));
+            } else {
+                bus.publish(Event.warn("clam.heartbeat", "clawbot not running")
+                    .with("downMs", procExitedMs > 0 ? (now - procExitedMs) : -1)
+                    .with("lastExitCode", lastExitCode)
+                    .with("lastCrashHint", lastCrashHint));
+            }
+        }
+
+        private void tickMonitor() {
+            if (!running.get()) return;
+            Process p = process;
+            if (p == null) return;
+            if (p.isAlive()) return;
+
+            long now = clock.nowMs();
+            long lifetime = procStartedMs > 0 ? (now - procStartedMs) : 0;
+            if (lifetime >= config.minUptimeMs) {
+                // healthy run ended; reset backoff
+                backoff.reset();
+            }
+
+            // capture exit code
+            Integer code = null;
+            try { code = p.exitValue(); } catch (IllegalThreadStateException ignored) {}
+            lastExitCode = code;
+            procExitedMs = now;
+
+            bus.publish(Event.warn("clam.process.exit", "Target process exited")
+                .with("exitCode", code)
+                .with("lifetimeMs", lifetime));
+
+            // if died quickly, schedule rebuild logic
+            if (lifetime < config.minUptimeMs) {
