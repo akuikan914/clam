@@ -1373,3 +1373,58 @@ public class Clam {
             stdoutArea = makeArea();
             stderrArea = makeArea();
             eventsArea = makeArea();
+
+            tabs.addTab("stdout", new JScrollPane(stdoutArea));
+            tabs.addTab("stderr", new JScrollPane(stderrArea));
+            tabs.addTab("events", new JScrollPane(eventsArea));
+            tabs.addTab("config", buildConfigPanel());
+
+            return tabs;
+        }
+
+        private JTextArea makeArea() {
+            JTextArea a = new JTextArea();
+            a.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+            a.setEditable(false);
+            a.setLineWrap(true);
+            a.setWrapStyleWord(true);
+            return a;
+        }
+
+        private JComponent buildConfigPanel() {
+            JPanel p = new JPanel(new GridBagLayout());
+            GridBagConstraints c = new GridBagConstraints();
+            c.insets = new Insets(6, 6, 6, 6);
+            c.fill = GridBagConstraints.HORIZONTAL;
+            c.anchor = GridBagConstraints.WEST;
+
+            JLabel lCmd = new JLabel("Command");
+            cmdField = new JTextField(String.join(" ", config.command));
+            JLabel lWd = new JLabel("Working dir");
+            wdField = new JTextField(config.workDir.toString());
+            JLabel lPort = new JLabel("HTTP port");
+            portField = new JTextField(Integer.toString(config.httpPort));
+            headlessHint = new JCheckBox("Headless mode hint (UI won't apply, but config will)", false);
+
+            JButton openConfig = new JButton("Open config file");
+            JButton saveConfig = new JButton("Save config (overwrite)");
+            JButton validate = new JButton("Validate");
+            JButton copyCurl = new JButton("Copy curl");
+
+            openConfig.addActionListener(e -> openFile(configPath));
+            saveConfig.addActionListener(e -> saveConfigFromUI());
+            validate.addActionListener(e -> validateConfigUI());
+            copyCurl.addActionListener(e -> copyCurl());
+
+            // track edits
+            DocumentListener dl = new DocumentListener() {
+                @Override public void insertUpdate(DocumentEvent e) { markDirty(); }
+                @Override public void removeUpdate(DocumentEvent e) { markDirty(); }
+                @Override public void changedUpdate(DocumentEvent e) { markDirty(); }
+            };
+            cmdField.getDocument().addDocumentListener(dl);
+            wdField.getDocument().addDocumentListener(dl);
+            portField.getDocument().addDocumentListener(dl);
+
+            int y = 0;
+            c.gridx = 0; c.gridy = y; c.weightx = 0; p.add(lCmd, c);
