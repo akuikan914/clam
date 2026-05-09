@@ -1483,3 +1483,58 @@ public class Clam {
         }
 
         private void tickUI(ActionEvent e) {
+            Snapshot snap = engine.snapshot();
+
+            String status = snap.alive ? "RUNNING" : "DOWN";
+            statusLabel.setText("status: " + status);
+            statusLabel.setForeground(snap.alive ? new Color(0, 128, 0) : new Color(160, 0, 0));
+
+            if (snap.alive) {
+                uptimeLabel.setText("uptime: " + formatDurationMs(System.currentTimeMillis() - snap.startedMs));
+            } else {
+                uptimeLabel.setText("down: " + (snap.exitedMs > 0 ? formatDurationMs(System.currentTimeMillis() - snap.exitedMs) : "—"));
+            }
+
+            restartsLabel.setText("restarts/h: " + snap.restartsLastHour + " | rebuild attempts: " + snap.rebuildAttempts);
+            backoffLabel.setText("backoff: " + snap.backoffMs + " ms" + (snap.crashHint != null ? " | hint: " + snap.crashHint : ""));
+
+            // refresh text areas every few ticks
+            int t = uiTick.incrementAndGet();
+            if (t % 2 == 0) {
+                stdoutArea.setText(String.join("\n", snap.stdoutTail));
+                stderrArea.setText(String.join("\n", snap.stderrTail));
+                eventsArea.setText(renderEvents(snap.eventsTail));
+            }
+        }
+
+        private static String renderEvents(List<Event> ev) {
+            StringBuilder sb = new StringBuilder();
+            SimpleDateFormat fmt = new SimpleDateFormat("HH:mm:ss.SSS");
+            for (Event e : ev) {
+                sb.append(fmt.format(new Date(e.atMs))).append(" ");
+                sb.append(e.level.toUpperCase(Locale.ROOT)).append(" ");
+                sb.append(e.type).append(" — ").append(e.message);
+                if (!e.fields.isEmpty()) {
+                    sb.append(" ").append(Json.stringify(e.fields));
+                }
+                sb.append("\n");
+            }
+            return sb.toString();
+        }
+
+        private void copySnapshotToClipboard() {
+            Snapshot snap = engine.snapshot();
+            String json = Json.pretty(snap.toMap());
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(json), null);
+            bus.publish(Event.info("clam.ui.clipboard", "Copied snapshot to clipboard").with("bytes", json.length()));
+        }
+
+        private void copyCurl() {
+            String cmd = "curl http://127.0.0.1:" + config.httpPort + "/status";
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(cmd), null);
+            bus.publish(Event.info("clam.ui.clipboard", "Copied curl to clipboard"));
+        }
+
+        private void saveConfigFromUI() {
+            try {
+                Map<String, Object> m = config.toMap();
