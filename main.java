@@ -1758,3 +1758,58 @@ public class Clam {
                     write(sb, e.getValue());
                 }
                 sb.append("}");
+                return;
+            }
+            if (o instanceof List<?> list) {
+                sb.append("[");
+                for (int i = 0; i < list.size(); i++) {
+                    if (i > 0) sb.append(",");
+                    write(sb, list.get(i));
+                }
+                sb.append("]");
+                return;
+            }
+            sb.append('"').append(escape(String.valueOf(o))).append('"');
+        }
+
+        static String escape(String s) {
+            StringBuilder sb = new StringBuilder(s.length() + 16);
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                switch (c) {
+                    case '\\' -> sb.append("\\\\");
+                    case '"' -> sb.append("\\\"");
+                    case '\n' -> sb.append("\\n");
+                    case '\r' -> sb.append("\\r");
+                    case '\t' -> sb.append("\\t");
+                    default -> {
+                        if (c < 32) sb.append(String.format("\\u%04x", (int) c));
+                        else sb.append(c);
+                    }
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    static final class JsonParse {
+        final String s;
+        int i;
+        JsonParse(String s) { this.s = s; this.i = 0; }
+    }
+
+    static final class Json2 {
+        static Map<String, Object> parseObject(String raw) {
+            Object o = parse(raw);
+            if (o instanceof Map<?, ?> m) {
+                Map<String, Object> out = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> e : m.entrySet()) out.put(String.valueOf(e.getKey()), e.getValue());
+                return out;
+            }
+            return new LinkedHashMap<>();
+        }
+
+        static Object parse(String raw) {
+            JsonParse p = new JsonParse(raw == null ? "" : raw);
+            skipWs(p);
+            Object v = parseValue(p);
