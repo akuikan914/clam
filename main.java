@@ -1318,3 +1318,58 @@ public class Clam {
             root.add(buildCenter(), BorderLayout.CENTER);
             root.add(buildBottom(), BorderLayout.SOUTH);
 
+            frame.setContentPane(root);
+            frame.pack();
+            frame.setLocationRelativeTo(null);
+            frame.setVisible(true);
+
+            timer = new Timer(config.uiRefreshMs, this::tickUI);
+            timer.start();
+
+            bus.publish(Event.info("clam.ui.open", "UI opened").with("configPath", configPath.toString()));
+        }
+
+        private JComponent buildTopBar() {
+            JPanel p = new JPanel(new GridBagLayout());
+            GridBagConstraints c = new GridBagConstraints();
+            c.insets = new Insets(4, 4, 4, 4);
+            c.fill = GridBagConstraints.HORIZONTAL;
+
+            statusLabel = new JLabel("status: unknown");
+            statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD));
+
+            uptimeLabel = new JLabel("uptime: —");
+            restartsLabel = new JLabel("restarts/h: —");
+            backoffLabel = new JLabel("backoff: —");
+
+            JButton start = new JButton("Start");
+            JButton stop = new JButton("Stop");
+            JButton restart = new JButton("Restart");
+            JButton copyStatus = new JButton("Copy status JSON");
+
+            start.addActionListener(e -> engine.manualStart());
+            stop.addActionListener(e -> engine.manualStop());
+            restart.addActionListener(e -> engine.manualRestart());
+            copyStatus.addActionListener(e -> copySnapshotToClipboard());
+
+            int x = 0;
+            c.gridx = x++; c.gridy = 0; c.weightx = 1; p.add(statusLabel, c);
+            c.gridx = x++; c.gridy = 0; c.weightx = 0; p.add(start, c);
+            c.gridx = x++; c.gridy = 0; c.weightx = 0; p.add(stop, c);
+            c.gridx = x++; c.gridy = 0; c.weightx = 0; p.add(restart, c);
+            c.gridx = x++; c.gridy = 0; c.weightx = 0; p.add(copyStatus, c);
+
+            x = 0;
+            c.gridx = x++; c.gridy = 1; c.weightx = 1; p.add(uptimeLabel, c);
+            c.gridx = x++; c.gridy = 1; c.weightx = 1; p.add(restartsLabel, c);
+            c.gridx = x++; c.gridy = 1; c.weightx = 1; c.gridwidth = 3; p.add(backoffLabel, c);
+            c.gridwidth = 1;
+
+            return p;
+        }
+
+        private JComponent buildCenter() {
+            JTabbedPane tabs = new JTabbedPane();
+            stdoutArea = makeArea();
+            stderrArea = makeArea();
+            eventsArea = makeArea();
