@@ -1208,3 +1208,58 @@ public class Clam {
                 String method = parts.length > 0 ? parts[0] : "";
                 String path = parts.length > 1 ? parts[1] : "/";
 
+                if (!"GET".equalsIgnoreCase(method)) {
+                    writeResponse(out, 405, "text/plain; charset=utf-8", "Method Not Allowed");
+                    return;
+                }
+
+                if ("/".equals(path) || "/status".equals(path)) {
+                    Snapshot snap = snapshotSupplier.get();
+                    String body = Json.stringify(snap.toMap());
+                    writeResponse(out, 200, "application/json; charset=utf-8", body);
+                    return;
+                }
+                if ("/health".equals(path)) {
+                    Snapshot snap = snapshotSupplier.get();
+                    String body = snap.alive ? "ok" : "down";
+                    writeResponse(out, snap.alive ? 200 : 503, "text/plain; charset=utf-8", body);
+                    return;
+                }
+                writeResponse(out, 404, "text/plain; charset=utf-8", "Not Found");
+            } catch (Exception e) {
+                bus.publish(Event.warn("clam.http.handle", "Handle failed").with("error", e.toString()));
+            }
+        }
+
+        private static String readLine(InputStream in) throws IOException {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            while (true) {
+                int b = in.read();
+                if (b == -1) break;
+                if (b == '\n') break;
+                if (b != '\r') bos.write(b);
+                if (bos.size() > 8192) break;
+            }
+            if (bos.size() == 0) return null;
+            return bos.toString(StandardCharsets.UTF_8);
+        }
+
+        private static void writeResponse(OutputStream out, int code, String ct, String body) throws IOException {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            String status = switch (code) {
+                case 200 -> "OK";
+                case 404 -> "Not Found";
+                case 405 -> "Method Not Allowed";
+                case 503 -> "Service Unavailable";
+                default -> "OK";
+            };
+            String hdr = ""
+                + "HTTP/1.1 " + code + " " + status + "\r\n"
+                + "Content-Type: " + ct + "\r\n"
+                + "Content-Length: " + bytes.length + "\r\n"
+                + "Cache-Control: no-store\r\n"
+                + "Connection: close\r\n"
+                + "\r\n";
+            out.write(hdr.getBytes(StandardCharsets.UTF_8));
+            out.write(bytes);
+            out.flush();
