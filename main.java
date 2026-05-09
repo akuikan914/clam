@@ -1868,3 +1868,58 @@ public class Clam {
             }
             return out;
         }
+
+        private static String parseString(JsonParse p) {
+            expect(p, '"');
+            StringBuilder sb = new StringBuilder();
+            while (p.i < p.s.length()) {
+                char c = p.s.charAt(p.i++);
+                if (c == '"') break;
+                if (c == '\\' && p.i < p.s.length()) {
+                    char n = p.s.charAt(p.i++);
+                    switch (n) {
+                        case '"': sb.append('"'); break;
+                        case '\\': sb.append('\\'); break;
+                        case '/': sb.append('/'); break;
+                        case 'b': sb.append('\b'); break;
+                        case 'f': sb.append('\f'); break;
+                        case 'n': sb.append('\n'); break;
+                        case 'r': sb.append('\r'); break;
+                        case 't': sb.append('\t'); break;
+                        case 'u': {
+                            if (p.i + 4 <= p.s.length()) {
+                                String hex = p.s.substring(p.i, p.i + 4);
+                                p.i += 4;
+                                try { sb.append((char) Integer.parseInt(hex, 16)); } catch (Exception ignored) {}
+                            }
+                            break;
+                        }
+                        default: sb.append(n);
+                    }
+                } else {
+                    sb.append(c);
+                }
+            }
+            return sb.toString();
+        }
+
+        private static Number parseNumber(JsonParse p) {
+            int start = p.i;
+            while (p.i < p.s.length()) {
+                char c = p.s.charAt(p.i);
+                if (c == '-' || c == '+' || c == '.' || (c >= '0' && c <= '9') || c == 'e' || c == 'E') p.i++;
+                else break;
+            }
+            String t = p.s.substring(start, p.i).trim();
+            try {
+                if (t.contains(".") || t.contains("e") || t.contains("E")) return Double.parseDouble(t);
+                long v = Long.parseLong(t);
+                if (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) return (int) v;
+                return v;
+            } catch (Exception e) {
+                return 0;
+            }
+        }
+
+        private static void skipWs(JsonParse p) {
+            while (p.i < p.s.length()) {
