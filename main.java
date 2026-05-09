@@ -1538,3 +1538,58 @@ public class Clam {
         private void saveConfigFromUI() {
             try {
                 Map<String, Object> m = config.toMap();
+                m.put("httpPort", parsePortOr(config.httpPort));
+                m.put("workDir", wdField.getText().trim());
+                m.put("command", splitCommand(cmdField.getText()));
+                Files.writeString(configPath, Json.pretty(m), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                bus.publish(Event.info("clam.config.saved", "Saved config").with("path", configPath.toString()));
+            } catch (Exception ex) {
+                bus.publish(Event.error("clam.config.save_failed", "Save failed").with("error", ex.toString()));
+                JOptionPane.showMessageDialog(frame, "Save failed: " + ex.getMessage(), "clam", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+
+        private void validateConfigUI() {
+            List<String> issues = new ArrayList<>();
+            int port = parsePortOr(-1);
+            if (port <= 0 || port > 65535) issues.add("httpPort invalid");
+            Path wd = Paths.get(wdField.getText().trim());
+            if (!Files.exists(wd)) issues.add("workDir does not exist");
+            List<String> cmd = splitCommand(cmdField.getText());
+            if (cmd.isEmpty()) issues.add("command is empty");
+            if (issues.isEmpty()) {
+                JOptionPane.showMessageDialog(frame, "Looks OK.\nRestart to apply.", "clam", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(frame, String.join("\n", issues), "clam", JOptionPane.WARNING_MESSAGE);
+            }
+        }
+
+        private static List<String> splitCommand(String text) {
+            String t = text == null ? "" : text.trim();
+            if (t.isEmpty()) return List.of();
+            // simple splitter with quotes support
+            List<String> out = new ArrayList<>();
+            StringBuilder cur = new StringBuilder();
+            boolean q = false;
+            for (int i = 0; i < t.length(); i++) {
+                char ch = t.charAt(i);
+                if (ch == '"') { q = !q; continue; }
+                if (!q && Character.isWhitespace(ch)) {
+                    if (!cur.isEmpty()) { out.add(cur.toString()); cur.setLength(0); }
+                } else {
+                    cur.append(ch);
+                }
+            }
+            if (!cur.isEmpty()) out.add(cur.toString());
+            return out;
+        }
+
+        private int parsePortOr(int d) {
+            try { return Integer.parseInt(portField.getText().trim()); } catch (Exception ignored) { return d; }
+        }
+
+        private void markDirty() {
+            // lightweight: update window title to show edits
+            if (frame != null) frame.setTitle(APP_NAME + " — claw autofix & rebuild (" + APP_VERSION + ") *");
+        }
+
