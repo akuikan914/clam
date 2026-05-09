@@ -713,3 +713,58 @@ public class Clam {
             scheduler.scheduleAtFixedRate(this::tickMonitorSafe, 350, 500, TimeUnit.MILLISECONDS);
             scheduler.scheduleAtFixedRate(this::tickRebuildSafe, 700, 900, TimeUnit.MILLISECONDS);
 
+            if (config.autoStart) {
+                scheduler.execute(this::ensureRunningSafe);
+            }
+        }
+
+        void stop() {
+            if (!running.compareAndSet(true, false)) return;
+            bus.publish(Event.warn("clam.engine.stop", "Engine stopping"));
+            synchronized (procLock) {
+                if (process != null) {
+                    try {
+                        process.destroy();
+                    } catch (Exception ignored) {}
+                }
+            }
+            scheduler.shutdownNow();
+            ioPool.shutdownNow();
+        }
+
+        Snapshot snapshot() {
+            Process p = process;
+            long now = clock.nowMs();
+            boolean alive = p != null && p.isAlive();
+
+            List<String> outTail = stdoutRing.tail(LOG_TAIL_LINES);
+            List<String> errTail = stderrRing.tail(LOG_TAIL_LINES);
+            List<Event> evTail = eventRing.tail(250);
+
+            String cmd = config.command != null ? String.join(" ", config.command) : "(none)";
+            long upMs = (procStartedMs > 0 && alive) ? (now - procStartedMs) : 0;
+            long downMs = (!alive && procExitedMs > 0) ? (now - procExitedMs) : 0;
+
+            return new Snapshot(
+                alive,
+                procStartedMs,
+                procExitedMs,
+                lastExitCode,
+                lastCrashHint,
+                rebuildAttempts,
+                rebuildWindowStartMs,
+                limiter.countLastHour(now),
+                backoff.lastDelayMs(),
+                cmd,
+                config.workDir.toString(),
+                outTail,
+                errTail,
+                evTail
+            );
+        }
+
+        void setCommand(List<String> cmd, Path wd, Map<String, String> env) {
+            if (cmd == null || cmd.isEmpty()) return;
+            bus.publish(Event.info("clam.engine.command", "Command updated").with("cmd", cmd));
+            // Config is immutable; this method is intentionally limited.
+            // For UI editing, we request restart with an explicit new Config by writing config file and reloading.
