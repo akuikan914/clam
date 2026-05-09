@@ -383,3 +383,58 @@ public class Clam {
 
         static Config fromMap(Map<String, Object> m, Args args, RuntimeEnv env) {
             int port = asInt(m.get("httpPort"), args.httpPort != null ? args.httpPort : DEFAULT_HTTP_PORT);
+            int ui = asInt(m.get("uiRefreshMs"), DEFAULT_UI_REFRESH_MS);
+            int hb = asInt(m.get("heartbeatMs"), DEFAULT_HEARTBEAT_MS);
+            int minUp = asInt(m.get("minUptimeMs"), DEFAULT_MIN_UPTIME_MS);
+            int boMin = asInt(m.get("backoffMinMs"), DEFAULT_BACKOFF_MIN_MS);
+            int boMax = asInt(m.get("backoffMaxMs"), DEFAULT_BACKOFF_MAX_MS);
+            int maxR = asInt(m.get("maxRestartsPerHour"), DEFAULT_MAX_RESTARTS_PER_HOUR);
+            boolean autoStart = asBool(m.get("autoStart"), true);
+
+            List<String> cmd = asStringList(m.get("command"), args.cmd != null ? args.cmd : suggestedCommand(env));
+            Path wd = Paths.get(asString(m.get("workDir"), System.getProperty("user.dir", ".")));
+
+            Map<String, String> e = asStringMap(m.get("env"));
+            if (!e.containsKey("CLAM_BUILD")) e.put("CLAM_BUILD", BUILD_TOKEN);
+            if (!e.containsKey("CLAM_MODE")) e.put("CLAM_MODE", "watchdog");
+            if (!e.containsKey("CLAM_HEARTBEAT_MS")) e.put("CLAM_HEARTBEAT_MS", Integer.toString(hb));
+
+            Pattern crashSig = Pattern.compile(asString(m.get("crashSignature"), "(?i)(fatal|panic|out of memory|segmentation fault|unhandled|exception)"));
+            int scanLines = asInt(m.get("crashScanLines"), 120);
+            int scanBytes = asInt(m.get("crashScanBytes"), 48_000);
+
+            int rebuildWindowSeconds = asInt(m.get("rebuildWindowSeconds"), 3600);
+            int rebuildMaxAttempts = asInt(m.get("rebuildMaxAttempts"), 5);
+            int rebuildAttemptSpacingMs = asInt(m.get("rebuildAttemptSpacingMs"), 3500);
+            boolean rebuildAggressiveGc = asBool(m.get("rebuildAggressiveGc"), false);
+
+            int journalFlushMs = asInt(m.get("journalFlushMs"), 1500);
+            int snapshotRingSize = asInt(m.get("snapshotRingSize"), 256);
+
+            return new Config(
+                port, ui, hb, minUp, boMin, boMax, maxR, autoStart,
+                cmd, wd, e,
+                crashSig, scanLines, scanBytes,
+                rebuildWindowSeconds, rebuildMaxAttempts, rebuildAttemptSpacingMs, rebuildAggressiveGc,
+                journalFlushMs, snapshotRingSize
+            );
+        }
+
+        Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("httpPort", httpPort);
+            m.put("uiRefreshMs", uiRefreshMs);
+            m.put("heartbeatMs", heartbeatMs);
+            m.put("minUptimeMs", minUptimeMs);
+            m.put("backoffMinMs", backoffMinMs);
+            m.put("backoffMaxMs", backoffMaxMs);
+            m.put("maxRestartsPerHour", maxRestartsPerHour);
+            m.put("autoStart", autoStart);
+            m.put("command", command);
+            m.put("workDir", workDir.toString());
+            m.put("env", env);
+            m.put("crashSignature", crashSignature.pattern());
+            m.put("crashScanLines", crashScanLines);
+            m.put("crashScanBytes", crashScanBytes);
+            m.put("rebuildWindowSeconds", rebuildWindowSeconds);
+            m.put("rebuildMaxAttempts", rebuildMaxAttempts);
